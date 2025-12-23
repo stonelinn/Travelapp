@@ -186,8 +186,9 @@
                                 <div class="flex justify-between items-start mb-2">
                                     <span class="bg-primary-50 text-primary-700 text-xs font-bold px-2 py-1 rounded-md">{{ item.time }}</span>
                                     <div class="flex gap-2">
-                                        <button @click="editItem(item)" class="text-gray-300 hover:text-primary-600"><i class="ph ph-pencil-simple"></i></button>
-                                        <button @click="deleteItem(item.id)" class="text-gray-300 hover:text-red-500"><i class="ph ph-trash"></i></button>
+                                        <!-- 優化按鈕觸控區域與樣式 -->
+                                        <button @click="editItem(item)" class="p-2 -mr-1 text-gray-400 hover:text-primary-600 rounded-full active:bg-primary-50 transition-colors"><i class="ph-bold ph-pencil-simple text-lg"></i></button>
+                                        <button @click="deleteItem(item.id)" class="p-2 -mr-2 text-gray-400 hover:text-red-500 rounded-full active:bg-red-50 transition-colors"><i class="ph-bold ph-trash text-lg"></i></button>
                                     </div>
                                 </div>
                                 <h3 class="font-bold text-lg text-gray-800 mb-1">{{ item.title }}</h3>
@@ -319,14 +320,14 @@
                 </div>
             </nav>
 
-            <!-- 新增行程 Modal -->
+            <!-- 新增/修改行程 Modal -->
             <div v-if="showAddModal" class="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
                 <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl relative animate-slide-up">
-                    <h3 class="text-lg font-bold mb-4">新增行程 (Day {{ selectedDayIndex + 1 }})</h3>
+                    <h3 class="text-lg font-bold mb-4">{{ editingId ? '修改行程' : '新增行程' }} (Day {{ selectedDayIndex + 1 }})</h3>
                     <input v-model="newItem.time" type="time" class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3 outline-none focus:border-primary-500">
                     <input v-model="newItem.title" type="text" placeholder="行程名稱 (例: 晴空塔)" class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3 outline-none focus:border-primary-500">
                     <input v-model="newItem.location" type="text" placeholder="地點 (Google Map 搜尋用)" class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4 outline-none focus:border-primary-500">
-                    <div class="flex gap-3"><button @click="showAddModal = false" class="flex-1 py-3 rounded-xl bg-gray-100 text-gray-500 font-bold">取消</button><button @click="addItineraryItem" class="flex-1 py-3 rounded-xl bg-primary-600 text-white font-bold shadow-lg shadow-primary-200">確定新增</button></div>
+                    <div class="flex gap-3"><button @click="closeModal" class="flex-1 py-3 rounded-xl bg-gray-100 text-gray-500 font-bold">取消</button><button @click="saveItineraryItem" class="flex-1 py-3 rounded-xl bg-primary-600 text-white font-bold shadow-lg shadow-primary-200">{{ editingId ? '儲存修改' : '確定新增' }}</button></div>
                 </div>
             </div>
 
@@ -392,6 +393,7 @@
                 const showAddModal = ref(false);
                 const showAddNoteModal = ref(false);
                 const selectedDayIndex = ref(0);
+                const editingId = ref(null); // 用來追蹤正在編輯的行程 ID
                 
                 // Map State
                 const showMap = ref(false);
@@ -532,23 +534,51 @@
                     return { lat: appSettings.value.lat, lon: appSettings.value.lon }; // Fallback to city center
                 };
 
-                const addItineraryItem = async () => {
+                // --- Itinerary Logic (Fixed Edit/Delete) ---
+                const saveItineraryItem = async () => {
                     if(!newItem.value.title) return;
                     const dateFull = itineraryDays.value[selectedDayIndex.value].fullDate;
                     const coords = await getGeo(newItem.value.location || newItem.value.title);
                     const weather = await fetchWeather(coords.lat, coords.lon);
                     
-                    await addDoc(collection(db, "itinerary_items"), {
-                        ...newItem.value,
-                        dateFull, weather, coords, // Save coords for map
+                    const data = {
+                        time: newItem.value.time,
+                        title: newItem.value.title,
+                        location: newItem.value.location,
+                        dateFull, weather, coords,
                         timestamp: serverTimestamp()
-                    });
-                    showAddModal.value = false;
-                    newItem.value = { time: '09:00', title: '', location: '' };
+                    };
+
+                    if (editingId.value) {
+                        await updateDoc(doc(db, "itinerary_items", editingId.value), data);
+                    } else {
+                        await addDoc(collection(db, "itinerary_items"), data);
+                    }
+                    
+                    closeModal();
                 };
 
-                const deleteItem = async (id) => await deleteDoc(doc(db, "itinerary_items", id));
-                const editItem = (item) => { deleteItem(item.id); newItem.value = { ...item }; showAddModal.value = true; };
+                const deleteItem = async (id) => {
+                    if(confirm("確定要刪除這個行程嗎？")) {
+                        await deleteDoc(doc(db, "itinerary_items", id));
+                    }
+                };
+
+                const editItem = (item) => { 
+                    newItem.value = { 
+                        time: item.time, 
+                        title: item.title, 
+                        location: item.location 
+                    };
+                    editingId.value = item.id;
+                    showAddModal.value = true; 
+                };
+
+                const closeModal = () => {
+                    showAddModal.value = false;
+                    newItem.value = { time: '09:00', title: '', location: '' };
+                    editingId.value = null;
+                };
 
                 // --- Expenses ---
                 const addExpense = async () => {
@@ -719,7 +749,7 @@
 
                 return {
                     online, appSettings, setupForm, setupLoading, setupError, runSetup, resetApp,
-                    activeTab, showAddModal, showAddNoteModal, selectedDayIndex, itineraryDays, currentDayItinerary, newItem, addItineraryItem, deleteItem, editItem,
+                    activeTab, showAddModal, showAddNoteModal, selectedDayIndex, itineraryDays, currentDayItinerary, newItem, saveItineraryItem, deleteItem, editItem, closeModal, editingId,
                     showMap, toggleMap, locateUser, expenses, newExpense, addExpense, deleteExpense, toggleSettled,
                     notes, newNote, addNote, deleteNote, addDefaultNotes, getNoteColor, getNoteTagStyle,
                     activeTotalTWD, activeTongPaid, activeGuanCenPaid, activeBalance, activeTongPercent, totalTripTWD, chartData, topCategory, pieStyle,
