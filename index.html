@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Bali Trip 2024</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'Noto Sans TC', 'sans-serif'] },
+                    colors: {
+                        bali: { 50: '#f0fdfa', 100: '#ccfbf1', 500: '#14b8a6', 600: '#0d9488', 900: '#134e4a' }
+                    },
+                    animation: { 'fade-in': 'fadeIn 0.3s ease-out', 'slide-up': 'slideUp 0.3s ease-out' },
+                    keyframes: {
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+                        slideUp: { '0%': { transform: 'translateY(20px)', opacity: '0' }, '100%': { transform: 'translateY(0)', opacity: '1' } }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        .active-scale:active { transform: scale(0.97); }
+        #map { height: 250px; width: 100%; border-radius: 1rem; z-index: 0; }
+        .checkbox-wrapper input:checked + div { background-color: #0d9488; border-color: #0d9488; }
+        .checkbox-wrapper input:checked + div svg { display: block; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans antialiased selection:bg-bali-100">
+
+    <div id="app" class="max-w-md mx-auto min-h-screen bg-white shadow-2xl relative flex flex-col pb-safe">
+
+        <!-- 頂部標題區 -->
+        <header class="bg-bali-600 text-white pt-10 pb-6 px-6 rounded-b-[2rem] shadow-lg sticky top-0 z-20">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
+                        Bali Trip 🌴 
+                        <span v-if="!online" class="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded-full animate-pulse">離線</span>
+                        <span v-else class="text-[10px] bg-green-500/80 text-white px-1.5 py-0.5 rounded-full">同步中</span>
+                    </h1>
+                    <p class="text-bali-100 text-sm mt-1">4/17 - 4/23 • {{ currentTabName }}</p>
+                </div>
+                <div class="flex -space-x-2">
+                    <div class="w-8 h-8 rounded-full bg-orange-200 border-2 border-bali-600 flex items-center justify-center text-xs font-bold text-orange-700">彤</div>
+                    <div class="w-8 h-8 rounded-full bg-blue-200 border-2 border-bali-600 flex items-center justify-center text-xs font-bold text-blue-700">冠</div>
+                </div>
+            </div>
+        </header>
+
+        <!-- 主要內容區 -->
+        <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-24 no-scrollbar">
+            
+            <!-- 分頁 1: 行程表 -->
+            <div v-if="activeTab === 'itinerary'" class="animate-fade-in">
+                <!-- 日期選擇器 -->
+                <div class="flex overflow-x-auto gap-3 pb-4 mb-2 no-scrollbar snap-x">
+                    <button v-for="(day, index) in itineraryDays" :key="index" @click="selectedDayIndex = index"
+                        class="flex-shrink-0 snap-center flex flex-col items-center justify-center w-14 h-16 rounded-xl transition-all duration-300 border active-scale"
+                        :class="selectedDayIndex === index ? 'bg-bali-600 text-white shadow-md border-bali-600' : 'bg-white text-gray-400 border-gray-100'">
+                        <span class="text-xs font-medium">Day {{ index + 1 }}</span>
+                        <span class="text-lg font-bold">{{ day.date }}</span>
+                    </button>
+                </div>
+
+                <!-- 地圖開關 -->
+                <div class="mb-4">
+                    <button @click="toggleMap" class="flex items-center gap-2 text-xs font-bold text-bali-600 bg-bali-50 px-3 py-1.5 rounded-lg mb-2 active-scale transition-colors">
+                        <i class="ph-fill" :class="showMap ? 'ph-map-trifold' : 'ph-map-pin'"></i>
+                        {{ showMap ? '隱藏地圖' : '顯示行程地圖' }}
+                    </button>
+                    <div v-show="showMap" class="relative rounded-2xl overflow-hidden border border-gray-200 shadow-sm animate-fade-in">
+                        <div id="map"></div>
+                        <button @click="locateUser" class="absolute bottom-3 right-3 bg-white p-2 rounded-lg shadow-md z-[400] text-bali-600 active-scale"><i class="ph-fill ph-crosshair"></i></button>
+                    </div>
+                </div>
+
+                <!-- 行程列表 -->
+                <div class="space-y-4">
+                    <div v-if="currentDayItinerary.length === 0" class="text-center py-10 text-gray-400">
+                        <i class="ph ph-calendar-plus text-4xl mb-2"></i>
+                        <p>今天還沒有安排行程</p>
+                    </div>
+                    <div v-for="item in currentDayItinerary" :key="item.id" class="relative pl-6 border-l-2 border-bali-100 last:border-0 group">
+                        <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white border-4 border-bali-500"></div>
+                        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6 active-scale transition-transform">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="bg-bali-50 text-bali-700 text-xs font-bold px-2 py-1 rounded-md">{{ item.time }}</span>
+                                <div class="flex gap-2">
+                                    <button @click="editItem(item)" class="text-gray-300 hover:text-bali-600"><i class="ph ph-pencil-simple"></i></button>
+                                    <button @click="deleteItem(item.id)" class="text-gray-300 hover:text-red-500"><i class="ph ph-trash"></i></button>
+                                </div>
+                            </div>
+                            <h3 class="font-bold text-lg text-gray-800 mb-1">{{ item.title }}</h3>
+                            <p class="text-gray-500 text-sm mb-3 flex items-center gap-1"><i class="ph ph-map-pin"></i> {{ item.location }}</p>
+                            <div class="flex gap-2 mt-3">
+                                <a :href="`https://www.google.com/maps/search/?api=1&query=${item.location}`" target="_blank" class="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-600 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1"><i class="ph-fill ph-navigation-arrow text-bali-600"></i> 導航</a>
+                                <div v-if="item.weather" class="flex-1 bg-blue-50 text-blue-600 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1"><i class="ph-fill" :class="getWeatherIcon(item.weather.code)"></i> {{ item.weather.temp }}°C</div>
+                                <div v-else class="flex-1 bg-gray-50 text-gray-400 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1"><i class="ph ph-spinner animate-spin"></i> 氣溫</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button @click="showAddModal = true" class="w-full py-3 mt-4 border-2 border-dashed border-bali-200 text-bali-500 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-bali-50 active-scale"><i class="ph ph-plus-circle text-xl"></i> 新增行程</button>
+            </div>
+
+            <!-- 分頁 2: 記帳本 -->
+            <div v-if="activeTab === 'expense'" class="animate-fade-in">
+                <div class="bg-gradient-to-br from-gray-800 to-gray-900 text-white p-5 rounded-2xl shadow-lg mb-6 relative overflow-hidden">
+                    <div class="absolute -right-6 -top-6 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
+                    <div class="flex justify-between items-end mb-4 relative z-10">
+                        <div>
+                            <p class="text-gray-400 text-xs mb-1">未結清總額 (TWD)</p>
+                            <h2 class="text-3xl font-bold font-mono tracking-tight">${{ formatMoney(activeTotalTWD) }}</h2>
+                        </div>
+                        <div class="text-right">
+                             <p class="text-xs" :class="activeBalance >= 0 ? 'text-green-400' : 'text-red-400'">{{ activeBalance === 0 ? '目前已結清' : (activeBalance > 0 ? '冠岑 需給 彤' : '彤 需給 冠岑') }}</p>
+                            <p class="text-xl font-bold">${{ formatMoney(Math.abs(activeBalance)) }}</p>
+                        </div>
+                    </div>
+                    <div class="w-full bg-gray-700 h-2 rounded-full overflow-hidden flex relative z-10">
+                        <div class="bg-orange-400 h-full transition-all duration-500" :style="`width: ${activeTongPercent}%`"></div>
+                        <div class="bg-blue-400 h-full transition-all duration-500" :style="`width: ${100 - activeTongPercent}%`"></div>
+                    </div>
+                    <div class="flex justify-between text-[10px] mt-1 text-gray-400 relative z-10">
+                        <span class="text-orange-300">彤 墊付 ${{formatMoney(activeTongPaid)}}</span>
+                        <span class="text-blue-300">冠岑 墊付 ${{formatMoney(activeGuanCenPaid)}}</span>
+                    </div>
+                </div>
+
+                <form @submit.prevent="addExpense" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6">
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">金額</label>
+                            <div class="flex">
+                                <select v-model="newExpense.currency" class="bg-gray-100 rounded-l-lg text-sm px-2 outline-none"><option value="IDR">IDR</option><option value="TWD">TWD</option><option value="USD">USD</option></select>
+                                <input type="number" v-model="newExpense.amount" placeholder="0" class="w-full bg-gray-50 border-y border-r border-gray-200 rounded-r-lg p-2 text-sm outline-none focus:border-bali-500">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">類別</label>
+                            <select v-model="newExpense.category" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none"><option>食物</option><option>交通</option><option>住宿</option><option>購物</option><option>玩樂</option><option>小費</option></select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <input type="text" v-model="newExpense.description" placeholder="輸入項目 (如: GoJek, 晚餐)" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none focus:border-bali-500">
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <div class="flex gap-2">
+                            <label class="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors" :class="newExpense.payer === '彤' ? 'bg-orange-100 border-orange-200 text-orange-700 font-bold' : 'bg-white border-gray-200 text-gray-500'"><input type="radio" v-model="newExpense.payer" value="彤" class="hidden"> 彤</label>
+                            <label class="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors" :class="newExpense.payer === '冠岑' ? 'bg-blue-100 border-blue-200 text-blue-700 font-bold' : 'bg-white border-gray-200 text-gray-500'"><input type="radio" v-model="newExpense.payer" value="冠岑" class="hidden"> 冠岑</label>
+                        </div>
+                        <button type="submit" class="bg-bali-600 text-white rounded-lg w-10 h-10 flex items-center justify-center shadow-lg shadow-bali-200 active-scale"><i class="ph-bold ph-plus"></i></button>
+                    </div>
+                </form>
+
+                <div class="space-y-3">
+                    <div v-for="exp in expenses" :key="exp.id" class="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-50 shadow-sm transition-all duration-300" :class="exp.isSettled ? 'opacity-50 grayscale bg-gray-50' : ''">
+                        <div class="flex items-center gap-3">
+                            <label class="checkbox-wrapper cursor-pointer relative w-5 h-5">
+                                <input type="checkbox" v-model="exp.isSettled" @change="toggleSettled(exp)" class="hidden">
+                                <div class="w-5 h-5 border-2 border-gray-300 rounded-md flex items-center justify-center transition-colors"><svg class="w-3 h-3 text-white hidden pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>
+                            </label>
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0" :class="getCategoryColor(exp.category)"><i :class="getCategoryIcon(exp.category)"></i></div>
+                            <div>
+                                <h4 class="font-bold text-gray-800 text-sm" :class="exp.isSettled ? 'line-through text-gray-400' : ''">{{ exp.description }}</h4>
+                                <div class="flex gap-1 mt-0.5">
+                                    <span class="text-[10px] px-1.5 py-0.5 rounded" :class="exp.payer === '彤' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'">{{ exp.payer }}</span>
+                                    <span class="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{{ exp.date }}</span>
+                                    <span v-if="exp.isSettled" class="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded font-bold">已結清</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-bold text-gray-800">{{ exp.currency }} {{ formatMoney(exp.amount) }}</p>
+                            <p v-if="exp.currency !== 'TWD'" class="text-[10px] text-gray-400">≈ NT$ {{ formatMoney(convertToTWD(exp)) }}</p>
+                            <button @click="deleteExpense(exp.id)" class="text-red-300 text-xs mt-1 hover:text-red-500">刪除</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 分頁 3: 統計圖表 -->
+            <div v-if="activeTab === 'chart'" class="animate-fade-in flex flex-col items-center">
+                <div v-if="expenses.length === 0" class="text-center py-20 text-gray-400"><i class="ph ph-chart-pie-slice text-4xl mb-2"></i><p>還沒有支出紀錄</p></div>
+                <div v-else class="w-full">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6 text-center">
+                        <p class="text-gray-400 text-xs mb-1">旅程總支出 (含已結清)</p>
+                        <h2 class="text-3xl font-bold text-gray-800 font-mono">${{ formatMoney(totalTripTWD) }}</h2>
+                    </div>
+                    <div class="relative w-56 h-56 mx-auto mb-8 rounded-full shadow-inner active-scale transition-transform" :style="pieStyle">
+                        <div class="absolute inset-0 m-auto w-36 h-36 bg-white rounded-full flex items-center justify-center flex-col shadow-sm">
+                            <span class="text-xs text-gray-400">主要支出</span>
+                            <span class="font-bold text-lg text-bali-600">{{ topCategory.name }}</span>
+                            <span class="text-xs text-gray-400">{{ topCategory.percent.toFixed(0) }}%</span>
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        <div v-for="item in chartData" :key="item.name" class="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-50 shadow-sm">
+                            <div class="flex items-center gap-3"><div class="w-3 h-3 rounded-full" :style="{ backgroundColor: item.color }"></div><span class="font-bold text-gray-700 text-sm">{{ item.name }}</span></div>
+                            <div class="text-right"><p class="font-bold text-gray-800 text-sm">${{ formatMoney(item.value) }}</p><p class="text-xs text-gray-400">{{ item.percent.toFixed(1) }}%</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 底部導航 -->
+        <nav class="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-100 pb-safe z-30">
+            <div class="grid grid-cols-3 h-16">
+                <button @click="activeTab = 'itinerary'" class="flex flex-col items-center gap-1 w-full h-full justify-center active-scale transition-colors" :class="activeTab === 'itinerary' ? 'text-bali-600' : 'text-gray-400'"><i class="text-2xl" :class="activeTab === 'itinerary' ? 'ph-fill ph-map-trifold' : 'ph ph-map-trifold'"></i><span class="text-[10px] font-medium">行程</span></button>
+                <button @click="activeTab = 'expense'" class="flex flex-col items-center gap-1 w-full h-full justify-center active-scale transition-colors border-x border-gray-50" :class="activeTab === 'expense' ? 'text-bali-600' : 'text-gray-400'"><i class="text-2xl" :class="activeTab === 'expense' ? 'ph-fill ph-wallet' : 'ph ph-wallet'"></i><span class="text-[10px] font-medium">分帳</span></button>
+                <button @click="activeTab = 'chart'" class="flex flex-col items-center gap-1 w-full h-full justify-center active-scale transition-colors" :class="activeTab === 'chart' ? 'text-bali-600' : 'text-gray-400'"><i class="text-2xl" :class="activeTab === 'chart' ? 'ph-fill ph-chart-pie-slice' : 'ph ph-chart-pie-slice'"></i><span class="text-[10px] font-medium">統計</span></button>
+            </div>
+        </nav>
+
+        <!-- 新增行程 Modal -->
+        <div v-if="showAddModal" class="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+            <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl relative animate-slide-up">
+                <h3 class="text-lg font-bold mb-4">新增行程 (Day {{ selectedDayIndex + 1 }})</h3>
+                <input v-model="newItem.time" type="time" class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3 outline-none focus:border-bali-500">
+                <input v-model="newItem.title" type="text" placeholder="行程名稱 (例: 烏布皇宮)" class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3 outline-none focus:border-bali-500">
+                <input v-model="newItem.location" type="text" placeholder="地點 (Google Map 搜尋用)" class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4 outline-none focus:border-bali-500">
+                <div class="flex gap-3"><button @click="showAddModal = false" class="flex-1 py-3 rounded-xl bg-gray-100 text-gray-500 font-bold">取消</button><button @click="addItineraryItem" class="flex-1 py-3 rounded-xl bg-bali-600 text-white font-bold shadow-lg shadow-bali-200">確定新增</button></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ⚠️ 請將這裡的 <script> 改為 type="module" 才能使用 Firebase -->
+    <script type="module">
+        import { createApp, ref, computed, onMounted, nextTick, watch } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        // ⚠️【請將步驟 1 申請的 config 貼在這裡】⚠️
+        const firebaseConfig = {
+    apiKey: "AIzaSyB6IaBzTn3xTxhO8q37Zm1gVHnxDObfYqo",
+    authDomain: "baliapp-e0946.firebaseapp.com",
+    projectId: "baliapp-e0946",
+    storageBucket: "baliapp-e0946.firebasestorage.app",
+    messagingSenderId: "111272133986",
+    appId: "1:111272133986:web:f0d4b6daf1675d5170d83b"
+  };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        createApp({
+            setup() {
+                const online = ref(false);
+                const activeTab = ref('itinerary');
+                const showAddModal = ref(false);
+                const selectedDayIndex = ref(0);
+                
+                // Map State
+                const showMap = ref(false);
+                let mapInstance = null;
+                let markersGroup = null;
+                let userMarker = null;
+
+                // Data Refs
+                const itineraryDays = ref([
+                    { date: '17', fullDate: '2024-04-17', items: [] },
+                    { date: '18', fullDate: '2024-04-18', items: [] },
+                    { date: '19', fullDate: '2024-04-19', items: [] },
+                    { date: '20', fullDate: '2024-04-20', items: [] },
+                    { date: '21', fullDate: '2024-04-21', items: [] },
+                    { date: '22', fullDate: '2024-04-22', items: [] },
+                    { date: '23', fullDate: '2024-04-23', items: [] },
+                ]);
+                const expenses = ref([]);
+                const newItem = ref({ time: '09:00', title: '', location: '' });
+                const newExpense = ref({ amount: '', description: '', currency: 'IDR', payer: '彤', category: '食物', isSettled: false });
+                const rates = ref({ IDR: 490, USD: 0.032 });
+
+                // Location Coords for Map
+                const locationCoords = {
+                    'ubud': { lat: -8.5069, lon: 115.2625 }, 'kuta': { lat: -8.7233, lon: 115.1723 },
+                    'seminyak': { lat: -8.6829, lon: 115.1547 }, 'uluwatu': { lat: -8.8485, lon: 115.0874 },
+                    'canggu': { lat: -8.6478, lon: 115.1385 }, 'airport': { lat: -8.7482, lon: 115.1672 },
+                    'denpasar': { lat: -8.6705, lon: 115.2126 }
+                };
+                const categoryColors = { '食物':'#fb923c', '交通':'#60a5fa', '住宿':'#34d399', '購物':'#f472b6', '玩樂':'#a78bfa', '小費':'#facc15' };
+
+                // --- Firebase Auth & Sync ---
+                onMounted(() => {
+                    signInAnonymously(auth).catch(console.error);
+                    onAuthStateChanged(auth, (user) => {
+                        if (user) {
+                            online.value = true;
+                            // Sync Itinerary
+                            const qItinerary = query(collection(db, "itinerary_items"));
+                            onSnapshot(qItinerary, (snapshot) => {
+                                // Clear current items to avoid duplication
+                                itineraryDays.value.forEach(d => d.items = []);
+                                snapshot.forEach(doc => {
+                                    const data = doc.data();
+                                    const day = itineraryDays.value.find(d => d.fullDate === data.dateFull); // dateFull needs to be stored
+                                    if(day) day.items.push({ id: doc.id, ...data });
+                                });
+                                // Sort items by time
+                                itineraryDays.value.forEach(d => d.items.sort((a,b) => a.time.localeCompare(b.time)));
+                                if(showMap.value) updateMapMarkers();
+                            });
+
+                            // Sync Expenses
+                            const qExpenses = query(collection(db, "expenses"), orderBy("timestamp", "desc"));
+                            onSnapshot(qExpenses, (snapshot) => {
+                                expenses.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                            });
+                        }
+                    });
+                });
+
+                // --- Helper Functions ---
+                const getCoords = (loc) => {
+                    const l = loc.toLowerCase();
+                    for(let k in locationCoords) if(l.includes(k)) return locationCoords[k];
+                    return null;
+                };
+
+                const fetchWeather = async (lat, lon) => {
+                    try {
+                        const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=Asia%2FSingapore`);
+                        const d = await r.json();
+                        return { temp: Math.round(d.current.temperature_2m), code: d.current.weather_code };
+                    } catch { return null; }
+                };
+
+                const updateWeather = async (item) => {
+                    let c = getCoords(item.location) || getCoords(item.title) || locationCoords['denpasar'];
+                    return await fetchWeather(c.lat, c.lon);
+                };
+
+                // --- Actions (Firestore) ---
+                const addItineraryItem = async () => {
+                    if(!newItem.value.title) return;
+                    const dateFull = itineraryDays.value[selectedDayIndex.value].fullDate;
+                    const weather = await updateWeather(newItem.value);
+                    
+                    await addDoc(collection(db, "itinerary_items"), {
+                        ...newItem.value,
+                        dateFull,
+                        weather,
+                        timestamp: serverTimestamp()
+                    });
+                    showAddModal.value = false;
+                    newItem.value = { time: '09:00', title: '', location: '' };
+                };
+
+                const deleteItem = async (id) => {
+                    await deleteDoc(doc(db, "itinerary_items", id));
+                };
+
+                const editItem = (item) => {
+                    // Simple edit: delete old and open modal with values
+                    // In a real app, updateDoc is better, but this keeps UI simple
+                    deleteItem(item.id); 
+                    newItem.value = { time: item.time, title: item.title, location: item.location };
+                    showAddModal.value = true;
+                };
+
+                const addExpense = async () => {
+                    if(!newExpense.value.amount || !newExpense.value.description) return;
+                    await addDoc(collection(db, "expenses"), {
+                        ...newExpense.value,
+                        date: new Date().toLocaleDateString('zh-TW', {month:'numeric', day:'numeric'}),
+                        timestamp: serverTimestamp()
+                    });
+                    newExpense.value = { amount: '', description: '', currency: 'IDR', payer: '彤', category: '食物', isSettled: false };
+                };
+
+                const deleteExpense = async (id) => {
+                    await deleteDoc(doc(db, "expenses", id));
+                };
+
+                const toggleSettled = async (exp) => {
+                    await updateDoc(doc(db, "expenses", exp.id), { isSettled: exp.isSettled });
+                };
+
+                // --- Map Logic ---
+                const currentDayItinerary = computed(() => itineraryDays.value[selectedDayIndex.value].items);
+                
+                const initMap = () => {
+                    if(mapInstance) return;
+                    mapInstance = L.map('map').setView([-8.409518, 115.188919], 10);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OSM' }).addTo(mapInstance);
+                    markersGroup = L.layerGroup().addTo(mapInstance);
+                };
+
+                const updateMapMarkers = () => {
+                    if(!mapInstance || !markersGroup) return;
+                    markersGroup.clearLayers();
+                    let has = false, bounds = L.latLngBounds();
+                    currentDayItinerary.value.forEach(i => {
+                        let c = getCoords(i.location) || getCoords(i.title);
+                        if(c) {
+                            L.marker([c.lat, c.lon], { icon: L.icon({
+                                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+                                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                                iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+                            })}).bindPopup(`<b>${i.time} ${i.title}</b><br>${i.location}`).addTo(markersGroup);
+                            bounds.extend([c.lat, c.lon]); has = true;
+                        }
+                    });
+                    if(has) mapInstance.fitBounds(bounds, { padding: [50, 50] });
+                };
+
+                const toggleMap = async () => {
+                    showMap.value = !showMap.value;
+                    if(showMap.value) {
+                        await nextTick(); initMap(); updateMapMarkers(); mapInstance.invalidateSize();
+                        if("geolocation" in navigator) locateUser();
+                    }
+                };
+
+                const locateUser = () => {
+                    navigator.geolocation.getCurrentPosition(p => {
+                        const {latitude: lat, longitude: lng} = p.coords;
+                        if(userMarker) mapInstance.removeLayer(userMarker);
+                        userMarker = L.circleMarker([lat, lng], { radius:8, fillColor:"#3388ff", color:"#fff", weight:2, fillOpacity:0.8 }).addTo(mapInstance).bindPopup("你在這裡");
+                        mapInstance.setView([lat, lng], 13);
+                    });
+                };
+
+                watch(selectedDayIndex, () => { if(showMap.value) updateMapMarkers(); });
+
+                // --- Computed ---
+                const convertToTWD = (e) => {
+                    let amt = parseFloat(e.amount);
+                    if(e.currency === 'TWD') return amt;
+                    if(e.currency === 'IDR') return amt / rates.value.IDR;
+                    if(e.currency === 'USD') return amt / rates.value.USD;
+                    return 0;
+                };
+
+                const activeExpenses = computed(() => expenses.value.filter(e => !e.isSettled));
+                const activeTotalTWD = computed(() => activeExpenses.value.reduce((s, e) => s + convertToTWD(e), 0));
+                const activeTongPaid = computed(() => activeExpenses.value.filter(e => e.payer === '彤').reduce((s, e) => s + convertToTWD(e), 0));
+                const activeGuanCenPaid = computed(() => activeExpenses.value.filter(e => e.payer === '冠岑').reduce((s, e) => s + convertToTWD(e), 0));
+                const activeBalance = computed(() => activeTongPaid.value - (activeTotalTWD.value / 2));
+                const activeTongPercent = computed(() => activeTotalTWD.value === 0 ? 50 : (activeTongPaid.value / activeTotalTWD.value) * 100);
+
+                const totalTripTWD = computed(() => expenses.value.reduce((s, e) => s + convertToTWD(e), 0));
+                const chartData = computed(() => {
+                    const data = expenses.value.reduce((acc, curr) => {
+                        const val = convertToTWD(curr);
+                        acc[curr.category] = (acc[curr.category] || 0) + val;
+                        return acc;
+                    }, {});
+                    return Object.entries(data).sort(([,a], [,b]) => b - a).map(([name, value]) => ({
+                        name, value, percent: totalTripTWD.value ? (value / totalTripTWD.value) * 100 : 0,
+                        color: categoryColors[name] || '#9ca3af'
+                    }));
+                });
+                const topCategory = computed(() => chartData.value[0] || { name: '無', percent: 0 });
+                const pieStyle = computed(() => {
+                    if(!chartData.value.length) return { background: '#e5e7eb' };
+                    let ang = 0;
+                    return { background: `conic-gradient(${chartData.value.map(i => `${i.color} ${ang}% ${ang += i.percent}%`).join(', ')})` };
+                });
+
+                // Helpers
+                const formatMoney = (v) => new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 0 }).format(v);
+                const getWeatherIcon = (c) => c <= 3 ? 'ph-sun' : c <= 99 ? 'ph-cloud' : 'ph-sun';
+                const getCategoryColor = (c) => ({ '食物':'bg-orange-100 text-orange-500', '交通':'bg-blue-100 text-blue-500', '住宿':'bg-green-100 text-green-500', '購物':'bg-pink-100 text-pink-500', '玩樂':'bg-purple-100 text-purple-500', '小費':'bg-yellow-100 text-yellow-500' })[c] || 'bg-gray-100 text-gray-500';
+                const getCategoryIcon = (c) => `ph-fill ${{ '食物':'ph-hamburger', '交通':'ph-taxi', '住宿':'ph-bed', '購物':'ph-shopping-bag', '玩樂':'ph-confetti', '小費':'ph-hand-coins' }[c] || 'ph-star'}`;
+                const currentTabName = computed(() => ({ 'itinerary':'行程規劃', 'expense':'分帳助手', 'chart':'支出統計' }[activeTab.value]));
+
+                return {
+                    online, activeTab, showAddModal, selectedDayIndex, itineraryDays, currentDayItinerary, newItem, addItineraryItem, deleteItem, editItem,
+                    showMap, toggleMap, locateUser, expenses, newExpense, addExpense, deleteExpense, toggleSettled,
+                    activeTotalTWD, activeTongPaid, activeGuanCenPaid, activeBalance, activeTongPercent, totalTripTWD, chartData, topCategory, pieStyle,
+                    formatMoney, convertToTWD, getWeatherIcon, getCategoryColor, getCategoryIcon, currentTabName
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
