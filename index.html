@@ -19,9 +19,9 @@
                 extend: {
                     fontFamily: { sans: ['Inter', 'Noto Sans TC', 'sans-serif'] },
                     colors: {
-                        primary: { 50: '#f0fdfa', 100: '#ccfbf1', 500: '#14b8a6', 600: '#0d9488', 900: '#134e4a' } // 預設 Teal
+                        bali: { 50: '#f0fdfa', 100: '#ccfbf1', 500: '#14b8a6', 600: '#0d9488', 900: '#134e4a' }
                     },
-                    animation: { 'fade-in': 'fadeIn 0.5s ease-out', 'slide-up': 'slideUp 0.5s ease-out' },
+                    animation: { 'fade-in': 'fadeIn 0.3s ease-out', 'slide-up': 'slideUp 0.3s ease-out' },
                     keyframes: {
                         fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
                         slideUp: { '0%': { transform: 'translateY(20px)', opacity: '0' }, '100%': { transform: 'translateY(0)', opacity: '1' } }
@@ -40,319 +40,204 @@
         .checkbox-wrapper input:checked + div svg { display: block; }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800 font-sans antialiased selection:bg-primary-100">
+<body class="bg-gray-50 text-gray-800 font-sans antialiased selection:bg-bali-100">
 
     <div id="app" class="max-w-md mx-auto min-h-screen bg-white shadow-2xl relative flex flex-col pb-safe">
 
-        <!-- ================= 初始設定精靈 (Setup Wizard) ================= -->
-        <div v-if="!appSettings" class="fixed inset-0 z-50 bg-gradient-to-br from-primary-600 to-teal-900 text-white flex flex-col items-center justify-center p-8 animate-fade-in">
-            <div class="w-full max-w-sm bg-white/10 backdrop-blur-md border border-white/20 p-8 rounded-3xl shadow-2xl">
-                <div class="text-center mb-8">
-                    <i class="ph-duotone ph-airplane-tilt text-6xl mb-4"></i>
-                    <h1 class="text-3xl font-bold">開始新旅程</h1>
-                    <p class="text-primary-100 text-sm mt-2">輸入目的地，剩下的交給我</p>
+        <!-- 頂部標題區 -->
+        <header class="bg-bali-600 text-white pt-10 pb-6 px-6 rounded-b-[2rem] shadow-lg sticky top-0 z-20">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
+                        Bali Trip 🌴 
+                        <span v-if="!online" class="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded-full animate-pulse">離線</span>
+                        <span v-else class="text-[10px] bg-green-500/80 text-white px-1.5 py-0.5 rounded-full">同步中</span>
+                    </h1>
+                    <p class="text-bali-100 text-sm mt-1">4/17 - 4/23 • {{ currentTabName }}</p>
                 </div>
+                <div class="flex -space-x-2">
+                    <div class="w-8 h-8 rounded-full bg-orange-200 border-2 border-bali-600 flex items-center justify-center text-xs font-bold text-orange-700">彤</div>
+                    <div class="w-8 h-8 rounded-full bg-blue-200 border-2 border-bali-600 flex items-center justify-center text-xs font-bold text-blue-700">冠</div>
+                </div>
+            </div>
+        </header>
 
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-xs text-primary-100 mb-1 font-bold uppercase tracking-wider">目的地</label>
-                        <input v-model="setupForm.destination" type="text" placeholder="例如: Tokyo, London, Bali" class="w-full bg-white/20 border border-white/30 rounded-xl p-3 text-white placeholder-white/50 outline-none focus:bg-white/30 transition-all font-bold">
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block text-xs text-primary-100 mb-1 font-bold uppercase tracking-wider">出發日</label>
-                            <input v-model="setupForm.startDate" type="date" class="w-full bg-white/20 border border-white/30 rounded-xl p-3 text-white outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-xs text-primary-100 mb-1 font-bold uppercase tracking-wider">回程日</label>
-                            <input v-model="setupForm.endDate" type="date" class="w-full bg-white/20 border border-white/30 rounded-xl p-3 text-white outline-none">
-                        </div>
-                    </div>
-
-                    <label class="flex items-center gap-2 text-xs text-primary-100 mt-2 cursor-pointer">
-                        <input type="checkbox" v-model="setupForm.clearData" class="accent-pink-500 w-4 h-4">
-                        清除舊的 Firebase 資料 (開啟新旅程)
-                    </label>
-
-                    <button @click="runSetup" :disabled="setupLoading" class="w-full bg-white text-primary-900 font-bold py-4 rounded-xl mt-6 active-scale shadow-lg flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors">
-                        <i v-if="setupLoading" class="ph ph-spinner animate-spin text-xl"></i>
-                        <span v-else>設定完成，出發！</span>
-                        <i v-if="!setupLoading" class="ph-bold ph-arrow-right"></i>
+        <!-- 主要內容區 -->
+        <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-24 no-scrollbar">
+            
+            <!-- 分頁 1: 行程表 -->
+            <div v-if="activeTab === 'itinerary'" class="animate-fade-in">
+                <!-- 日期選擇器 -->
+                <div class="flex overflow-x-auto gap-3 pb-4 mb-2 no-scrollbar snap-x">
+                    <button v-for="(day, index) in itineraryDays" :key="index" @click="selectedDayIndex = index"
+                        class="flex-shrink-0 snap-center flex flex-col items-center justify-center w-14 h-16 rounded-xl transition-all duration-300 border active-scale"
+                        :class="selectedDayIndex === index ? 'bg-bali-600 text-white shadow-md border-bali-600' : 'bg-white text-gray-400 border-gray-100'">
+                        <span class="text-xs font-medium">Day {{ index + 1 }}</span>
+                        <span class="text-lg font-bold">{{ day.date }}</span>
                     </button>
-                    <p v-if="setupError" class="text-red-300 text-xs text-center mt-2">{{ setupError }}</p>
                 </div>
+
+                <!-- 地圖開關 -->
+                <div class="mb-4">
+                    <button @click="toggleMap" class="flex items-center gap-2 text-xs font-bold text-bali-600 bg-bali-50 px-3 py-1.5 rounded-lg mb-2 active-scale transition-colors">
+                        <i class="ph-fill" :class="showMap ? 'ph-map-trifold' : 'ph-map-pin'"></i>
+                        {{ showMap ? '隱藏地圖' : '顯示行程地圖' }}
+                    </button>
+                    <div v-show="showMap" class="relative rounded-2xl overflow-hidden border border-gray-200 shadow-sm animate-fade-in">
+                        <div id="map"></div>
+                        <button @click="locateUser" class="absolute bottom-3 right-3 bg-white p-2 rounded-lg shadow-md z-[400] text-bali-600 active-scale"><i class="ph-fill ph-crosshair"></i></button>
+                    </div>
+                </div>
+
+                <!-- 行程列表 -->
+                <div class="space-y-4">
+                    <div v-if="currentDayItinerary.length === 0" class="text-center py-10 text-gray-400">
+                        <i class="ph ph-calendar-plus text-4xl mb-2"></i>
+                        <p>今天還沒有安排行程</p>
+                    </div>
+                    <div v-for="item in currentDayItinerary" :key="item.id" class="relative pl-6 border-l-2 border-bali-100 last:border-0 group">
+                        <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white border-4 border-bali-500"></div>
+                        <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6 active-scale transition-transform">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="bg-bali-50 text-bali-700 text-xs font-bold px-2 py-1 rounded-md">{{ item.time }}</span>
+                                <div class="flex gap-2">
+                                    <button @click="editItem(item)" class="text-gray-300 hover:text-bali-600"><i class="ph ph-pencil-simple"></i></button>
+                                    <button @click="deleteItem(item.id)" class="text-gray-300 hover:text-red-500"><i class="ph ph-trash"></i></button>
+                                </div>
+                            </div>
+                            <h3 class="font-bold text-lg text-gray-800 mb-1">{{ item.title }}</h3>
+                            <p class="text-gray-500 text-sm mb-3 flex items-center gap-1"><i class="ph ph-map-pin"></i> {{ item.location }}</p>
+                            <div class="flex gap-2 mt-3">
+                                <a :href="`https://www.google.com/maps/search/?api=1&query=${item.location}`" target="_blank" class="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-600 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1"><i class="ph-fill ph-navigation-arrow text-bali-600"></i> 導航</a>
+                                <div v-if="item.weather" class="flex-1 bg-blue-50 text-blue-600 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1"><i class="ph-fill" :class="getWeatherIcon(item.weather.code)"></i> {{ item.weather.temp }}°C</div>
+                                <div v-else class="flex-1 bg-gray-50 text-gray-400 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1"><i class="ph ph-spinner animate-spin"></i> 氣溫</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button @click="showAddModal = true" class="w-full py-3 mt-4 border-2 border-dashed border-bali-200 text-bali-500 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-bali-50 active-scale"><i class="ph ph-plus-circle text-xl"></i> 新增行程</button>
+            </div>
+
+            <!-- 分頁 2: 記帳本 -->
+            <div v-if="activeTab === 'expense'" class="animate-fade-in">
+                <div class="bg-gradient-to-br from-gray-800 to-gray-900 text-white p-5 rounded-2xl shadow-lg mb-6 relative overflow-hidden">
+                    <div class="absolute -right-6 -top-6 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
+                    <div class="flex justify-between items-end mb-4 relative z-10">
+                        <div>
+                            <p class="text-gray-400 text-xs mb-1">未結清總額 (TWD)</p>
+                            <h2 class="text-3xl font-bold font-mono tracking-tight">${{ formatMoney(activeTotalTWD) }}</h2>
+                        </div>
+                        <div class="text-right">
+                             <p class="text-xs" :class="activeBalance >= 0 ? 'text-green-400' : 'text-red-400'">{{ activeBalance === 0 ? '目前已結清' : (activeBalance > 0 ? '冠岑 需給 彤' : '彤 需給 冠岑') }}</p>
+                            <p class="text-xl font-bold">${{ formatMoney(Math.abs(activeBalance)) }}</p>
+                        </div>
+                    </div>
+                    <div class="w-full bg-gray-700 h-2 rounded-full overflow-hidden flex relative z-10">
+                        <div class="bg-orange-400 h-full transition-all duration-500" :style="`width: ${activeTongPercent}%`"></div>
+                        <div class="bg-blue-400 h-full transition-all duration-500" :style="`width: ${100 - activeTongPercent}%`"></div>
+                    </div>
+                    <div class="flex justify-between text-[10px] mt-1 text-gray-400 relative z-10">
+                        <span class="text-orange-300">彤 墊付 ${{formatMoney(activeTongPaid)}}</span>
+                        <span class="text-blue-300">冠岑 墊付 ${{formatMoney(activeGuanCenPaid)}}</span>
+                    </div>
+                </div>
+
+                <form @submit.prevent="addExpense" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6">
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">金額</label>
+                            <div class="flex">
+                                <select v-model="newExpense.currency" class="bg-gray-100 rounded-l-lg text-sm px-2 outline-none"><option value="IDR">IDR</option><option value="TWD">TWD</option><option value="USD">USD</option></select>
+                                <input type="number" v-model="newExpense.amount" placeholder="0" class="w-full bg-gray-50 border-y border-r border-gray-200 rounded-r-lg p-2 text-sm outline-none focus:border-bali-500">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">類別</label>
+                            <select v-model="newExpense.category" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none"><option>食物</option><option>交通</option><option>住宿</option><option>購物</option><option>玩樂</option><option>小費</option></select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <input type="text" v-model="newExpense.description" placeholder="輸入項目 (如: GoJek, 晚餐)" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none focus:border-bali-500">
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <div class="flex gap-2">
+                            <label class="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors" :class="newExpense.payer === '彤' ? 'bg-orange-100 border-orange-200 text-orange-700 font-bold' : 'bg-white border-gray-200 text-gray-500'"><input type="radio" v-model="newExpense.payer" value="彤" class="hidden"> 彤</label>
+                            <label class="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors" :class="newExpense.payer === '冠岑' ? 'bg-blue-100 border-blue-200 text-blue-700 font-bold' : 'bg-white border-gray-200 text-gray-500'"><input type="radio" v-model="newExpense.payer" value="冠岑" class="hidden"> 冠岑</label>
+                        </div>
+                        <button type="submit" class="bg-bali-600 text-white rounded-lg w-10 h-10 flex items-center justify-center shadow-lg shadow-bali-200 active-scale"><i class="ph-bold ph-plus"></i></button>
+                    </div>
+                </form>
+
+                <div class="space-y-3">
+                    <div v-for="exp in expenses" :key="exp.id" class="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-50 shadow-sm transition-all duration-300" :class="exp.isSettled ? 'opacity-50 grayscale bg-gray-50' : ''">
+                        <div class="flex items-center gap-3">
+                            <label class="checkbox-wrapper cursor-pointer relative w-5 h-5">
+                                <input type="checkbox" v-model="exp.isSettled" @change="toggleSettled(exp)" class="hidden">
+                                <div class="w-5 h-5 border-2 border-gray-300 rounded-md flex items-center justify-center transition-colors"><svg class="w-3 h-3 text-white hidden pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>
+                            </label>
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0" :class="getCategoryColor(exp.category)"><i :class="getCategoryIcon(exp.category)"></i></div>
+                            <div>
+                                <h4 class="font-bold text-gray-800 text-sm" :class="exp.isSettled ? 'line-through text-gray-400' : ''">{{ exp.description }}</h4>
+                                <div class="flex gap-1 mt-0.5">
+                                    <span class="text-[10px] px-1.5 py-0.5 rounded" :class="exp.payer === '彤' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'">{{ exp.payer }}</span>
+                                    <span class="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{{ exp.date }}</span>
+                                    <span v-if="exp.isSettled" class="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded font-bold">已結清</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-bold text-gray-800">{{ exp.currency }} {{ formatMoney(exp.amount) }}</p>
+                            <p v-if="exp.currency !== 'TWD'" class="text-[10px] text-gray-400">≈ NT$ {{ formatMoney(convertToTWD(exp)) }}</p>
+                            <button @click="deleteExpense(exp.id)" class="text-red-300 text-xs mt-1 hover:text-red-500">刪除</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 分頁 3: 統計圖表 -->
+            <div v-if="activeTab === 'chart'" class="animate-fade-in flex flex-col items-center">
+                <div v-if="expenses.length === 0" class="text-center py-20 text-gray-400"><i class="ph ph-chart-pie-slice text-4xl mb-2"></i><p>還沒有支出紀錄</p></div>
+                <div v-else class="w-full">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6 text-center">
+                        <p class="text-gray-400 text-xs mb-1">旅程總支出 (含已結清)</p>
+                        <h2 class="text-3xl font-bold text-gray-800 font-mono">${{ formatMoney(totalTripTWD) }}</h2>
+                    </div>
+                    <div class="relative w-56 h-56 mx-auto mb-8 rounded-full shadow-inner active-scale transition-transform" :style="pieStyle">
+                        <div class="absolute inset-0 m-auto w-36 h-36 bg-white rounded-full flex items-center justify-center flex-col shadow-sm">
+                            <span class="text-xs text-gray-400">主要支出</span>
+                            <span class="font-bold text-lg text-bali-600">{{ topCategory.name }}</span>
+                            <span class="text-xs text-gray-400">{{ topCategory.percent.toFixed(0) }}%</span>
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        <div v-for="item in chartData" :key="item.name" class="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-50 shadow-sm">
+                            <div class="flex items-center gap-3"><div class="w-3 h-3 rounded-full" :style="{ backgroundColor: item.color }"></div><span class="font-bold text-gray-700 text-sm">{{ item.name }}</span></div>
+                            <div class="text-right"><p class="font-bold text-gray-800 text-sm">${{ formatMoney(item.value) }}</p><p class="text-xs text-gray-400">{{ item.percent.toFixed(1) }}%</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 底部導航 -->
+        <nav class="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-100 pb-safe z-30">
+            <div class="grid grid-cols-3 h-16">
+                <button @click="activeTab = 'itinerary'" class="flex flex-col items-center gap-1 w-full h-full justify-center active-scale transition-colors" :class="activeTab === 'itinerary' ? 'text-bali-600' : 'text-gray-400'"><i class="text-2xl" :class="activeTab === 'itinerary' ? 'ph-fill ph-map-trifold' : 'ph ph-map-trifold'"></i><span class="text-[10px] font-medium">行程</span></button>
+                <button @click="activeTab = 'expense'" class="flex flex-col items-center gap-1 w-full h-full justify-center active-scale transition-colors border-x border-gray-50" :class="activeTab === 'expense' ? 'text-bali-600' : 'text-gray-400'"><i class="text-2xl" :class="activeTab === 'expense' ? 'ph-fill ph-wallet' : 'ph ph-wallet'"></i><span class="text-[10px] font-medium">分帳</span></button>
+                <button @click="activeTab = 'chart'" class="flex flex-col items-center gap-1 w-full h-full justify-center active-scale transition-colors" :class="activeTab === 'chart' ? 'text-bali-600' : 'text-gray-400'"><i class="text-2xl" :class="activeTab === 'chart' ? 'ph-fill ph-chart-pie-slice' : 'ph ph-chart-pie-slice'"></i><span class="text-[10px] font-medium">統計</span></button>
+            </div>
+        </nav>
+
+        <!-- 新增行程 Modal -->
+        <div v-if="showAddModal" class="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+            <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl relative animate-slide-up">
+                <h3 class="text-lg font-bold mb-4">新增行程 (Day {{ selectedDayIndex + 1 }})</h3>
+                <input v-model="newItem.time" type="time" class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3 outline-none focus:border-bali-500">
+                <input v-model="newItem.title" type="text" placeholder="行程名稱 (例: 烏布皇宮)" class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3 outline-none focus:border-bali-500">
+                <input v-model="newItem.location" type="text" placeholder="地點 (Google Map 搜尋用)" class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4 outline-none focus:border-bali-500">
+                <div class="flex gap-3"><button @click="showAddModal = false" class="flex-1 py-3 rounded-xl bg-gray-100 text-gray-500 font-bold">取消</button><button @click="addItineraryItem" class="flex-1 py-3 rounded-xl bg-bali-600 text-white font-bold shadow-lg shadow-bali-200">確定新增</button></div>
             </div>
         </div>
-
-        <!-- ================= 主應用程式 (Main App) ================= -->
-        <template v-else>
-            <!-- 頂部標題區 -->
-            <header class="bg-primary-600 text-white pt-10 pb-6 px-6 rounded-b-[2rem] shadow-lg sticky top-0 z-20 transition-all duration-500">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
-                            {{ appSettings.destination }} ✈️
-                            <span v-if="!online" class="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded-full animate-pulse">離線</span>
-                            <span v-else class="text-[10px] bg-green-500/80 text-white px-1.5 py-0.5 rounded-full">同步中</span>
-                        </h1>
-                        <p class="text-primary-100 text-xs mt-1 font-mono uppercase tracking-wide">
-                            {{ appSettings.currency }} (1:{{ appSettings.rate }}) • {{ appSettings.lang }}
-                        </p>
-                    </div>
-                    <div class="flex -space-x-2" @click="resetApp"> <!-- 點擊頭像區可重置 -->
-                        <div class="w-8 h-8 rounded-full bg-orange-200 border-2 border-primary-600 flex items-center justify-center text-xs font-bold text-orange-700">彤</div>
-                        <div class="w-8 h-8 rounded-full bg-blue-200 border-2 border-primary-600 flex items-center justify-center text-xs font-bold text-blue-700">冠</div>
-                    </div>
-                </div>
-            </header>
-
-            <!-- 主要內容區 -->
-            <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-24 no-scrollbar">
-                
-                <!-- 分頁 0: 旅遊筆記 (Notes) -->
-                <div v-if="activeTab === 'notes'" class="animate-fade-in">
-                    <div class="flex justify-between items-center mb-4 px-2">
-                        <h2 class="text-lg font-bold text-gray-700 flex items-center gap-2"><i class="ph-duotone ph-notebook text-primary-600"></i> 旅行筆記</h2>
-                        <div class="flex items-center gap-2">
-                            <button v-if="notes.length === 0" @click="addDefaultNotes" class="text-xs text-primary-600 font-bold bg-primary-50 px-3 py-1.5 rounded-full active-scale">載入攻略</button>
-                            <button @click="showAddNoteModal = true" class="text-primary-600 active-scale p-1 rounded-full hover:bg-primary-50 transition-colors">
-                                <i class="ph-fill ph-plus-circle text-3xl"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- 筆記列表 -->
-                    <div class="grid gap-3">
-                        <div v-if="notes.length === 0" class="text-center py-10 text-gray-400">
-                             <i class="ph ph-pencil-slash text-4xl mb-2"></i>
-                             <p>還沒有筆記</p>
-                             <p class="text-xs mt-1">點擊右上角新增重要事項</p>
-                        </div>
-
-                        <div v-for="note in notes" :key="note.id" class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm group relative overflow-hidden transition-all hover:shadow-md">
-                            <!-- 分類色條 -->
-                            <div class="absolute left-0 top-0 bottom-0 w-1.5" :class="getNoteColor(note.tag)"></div>
-                            
-                            <div class="pl-2">
-                                <div class="flex justify-between items-start mb-1">
-                                    <h3 class="font-bold text-gray-800 text-base">{{ note.title }}</h3>
-                                    <div class="flex gap-2">
-                                        <button @click="deleteNote(note.id)" class="text-gray-300 hover:text-red-400 p-1"><i class="ph ph-trash"></i></button>
-                                    </div>
-                                </div>
-                                <p class="text-sm text-gray-600 whitespace-pre-line leading-relaxed">{{ note.content }}</p>
-                                <div class="mt-2 flex gap-2">
-                                    <span class="text-[10px] px-2 py-0.5 rounded-full font-bold" :class="getNoteTagStyle(note.tag)">{{ note.tag }}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 分頁 1: 行程表 -->
-                <div v-if="activeTab === 'itinerary'" class="animate-fade-in">
-                    <!-- 日期選擇器 -->
-                    <div class="flex overflow-x-auto gap-3 pb-4 mb-2 no-scrollbar snap-x">
-                        <button v-for="(day, index) in itineraryDays" :key="index" @click="selectedDayIndex = index"
-                            class="flex-shrink-0 snap-center flex flex-col items-center justify-center w-14 h-16 rounded-xl transition-all duration-300 border active-scale"
-                            :class="selectedDayIndex === index ? 'bg-primary-600 text-white shadow-md border-primary-600' : 'bg-white text-gray-400 border-gray-100'">
-                            <span class="text-xs font-medium">Day {{ index + 1 }}</span>
-                            <span class="text-lg font-bold">{{ day.displayDate }}</span>
-                        </button>
-                    </div>
-
-                    <!-- 地圖開關 -->
-                    <div class="mb-4">
-                        <button @click="toggleMap" class="flex items-center gap-2 text-xs font-bold text-primary-600 bg-primary-50 px-3 py-1.5 rounded-lg mb-2 active-scale transition-colors">
-                            <i class="ph-fill" :class="showMap ? 'ph-map-trifold' : 'ph-map-pin'"></i>
-                            {{ showMap ? '隱藏地圖' : '顯示行程地圖' }}
-                        </button>
-                        <div v-show="showMap" class="relative rounded-2xl overflow-hidden border border-gray-200 shadow-sm animate-fade-in">
-                            <div id="map"></div>
-                            <button @click="locateUser" class="absolute bottom-3 right-3 bg-white p-2 rounded-lg shadow-md z-[400] text-primary-600 active-scale"><i class="ph-fill ph-crosshair"></i></button>
-                        </div>
-                    </div>
-
-                    <!-- 行程列表 -->
-                    <div class="space-y-4">
-                        <div v-if="currentDayItinerary.length === 0" class="text-center py-10 text-gray-400">
-                            <i class="ph ph-calendar-plus text-4xl mb-2"></i>
-                            <p>今天還沒有安排行程</p>
-                        </div>
-                        <div v-for="item in currentDayItinerary" :key="item.id" class="relative pl-6 border-l-2 border-primary-100 last:border-0 group">
-                            <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white border-4 border-primary-500"></div>
-                            <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6 active-scale transition-transform">
-                                <div class="flex justify-between items-start mb-2">
-                                    <span class="bg-primary-50 text-primary-700 text-xs font-bold px-2 py-1 rounded-md">{{ item.time }}</span>
-                                    <div class="flex gap-2">
-                                        <!-- 優化按鈕觸控區域與樣式 -->
-                                        <button @click="editItem(item)" class="p-2 -mr-1 text-gray-400 hover:text-primary-600 rounded-full active:bg-primary-50 transition-colors"><i class="ph-bold ph-pencil-simple text-lg"></i></button>
-                                        <button @click="deleteItem(item.id)" class="p-2 -mr-2 text-gray-400 hover:text-red-500 rounded-full active:bg-red-50 transition-colors"><i class="ph-bold ph-trash text-lg"></i></button>
-                                    </div>
-                                </div>
-                                <h3 class="font-bold text-lg text-gray-800 mb-1">{{ item.title }}</h3>
-                                <p class="text-gray-500 text-sm mb-3 flex items-center gap-1"><i class="ph ph-map-pin"></i> {{ item.location }}</p>
-                                <div class="flex gap-2 mt-3">
-                                    <a :href="`https://www.google.com/maps/search/?api=1&query=${item.location}`" target="_blank" class="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-600 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1"><i class="ph-fill ph-navigation-arrow text-primary-600"></i> 導航</a>
-                                    <div v-if="item.weather" class="flex-1 bg-blue-50 text-blue-600 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1"><i class="ph-fill" :class="getWeatherIcon(item.weather.code)"></i> {{ item.weather.temp }}°C</div>
-                                    <div v-else class="flex-1 bg-gray-50 text-gray-400 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-1"><i class="ph ph-spinner animate-spin"></i> 氣溫</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <button @click="showAddModal = true" class="w-full py-3 mt-4 border-2 border-dashed border-primary-200 text-primary-500 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-primary-50 active-scale"><i class="ph ph-plus-circle text-xl"></i> 新增行程</button>
-                </div>
-
-                <!-- 分頁 2: 記帳本 -->
-                <div v-if="activeTab === 'expense'" class="animate-fade-in">
-                    <div class="bg-gradient-to-br from-gray-800 to-gray-900 text-white p-5 rounded-2xl shadow-lg mb-6 relative overflow-hidden">
-                        <div class="absolute -right-6 -top-6 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
-                        <div class="flex justify-between items-end mb-4 relative z-10">
-                            <div>
-                                <p class="text-gray-400 text-xs mb-1">未結清總額 (TWD)</p>
-                                <h2 class="text-3xl font-bold font-mono tracking-tight">${{ formatMoney(activeTotalTWD) }}</h2>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-xs" :class="activeBalance >= 0 ? 'text-green-400' : 'text-red-400'">{{ activeBalance === 0 ? '目前已結清' : (activeBalance > 0 ? '冠岑 需給 彤' : '彤 需給 冠岑') }}</p>
-                                <p class="text-xl font-bold">${{ formatMoney(Math.abs(activeBalance)) }}</p>
-                            </div>
-                        </div>
-                        <div class="w-full bg-gray-700 h-2 rounded-full overflow-hidden flex relative z-10">
-                            <div class="bg-orange-400 h-full transition-all duration-500" :style="`width: ${activeTongPercent}%`"></div>
-                            <div class="bg-blue-400 h-full transition-all duration-500" :style="`width: ${100 - activeTongPercent}%`"></div>
-                        </div>
-                        <div class="flex justify-between text-[10px] mt-1 text-gray-400 relative z-10">
-                            <span class="text-orange-300">彤 墊付 ${{formatMoney(activeTongPaid)}}</span>
-                            <span class="text-blue-300">冠岑 墊付 ${{formatMoney(activeGuanCenPaid)}}</span>
-                        </div>
-                    </div>
-
-                    <form @submit.prevent="addExpense" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6">
-                        <div class="grid grid-cols-2 gap-3 mb-3">
-                            <div>
-                                <label class="text-xs text-gray-400 block mb-1">金額</label>
-                                <div class="flex">
-                                    <!-- 動態幣別選擇 -->
-                                    <select v-model="newExpense.currency" class="bg-gray-100 rounded-l-lg text-sm px-2 outline-none font-bold text-primary-600">
-                                        <option :value="appSettings.currency">{{ appSettings.currency }}</option>
-                                        <option value="TWD">TWD</option>
-                                        <option value="USD">USD</option>
-                                    </select>
-                                    <input type="number" v-model="newExpense.amount" placeholder="0" class="w-full bg-gray-50 border-y border-r border-gray-200 rounded-r-lg p-2 text-sm outline-none focus:border-primary-500">
-                                </div>
-                            </div>
-                            <div>
-                                <label class="text-xs text-gray-400 block mb-1">類別</label>
-                                <select v-model="newExpense.category" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none"><option>食物</option><option>交通</option><option>住宿</option><option>購物</option><option>玩樂</option><option>小費</option></select>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <input type="text" v-model="newExpense.description" placeholder="輸入項目" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2 text-sm outline-none focus:border-primary-500">
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <div class="flex gap-2">
-                                <label class="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors" :class="newExpense.payer === '彤' ? 'bg-orange-100 border-orange-200 text-orange-700 font-bold' : 'bg-white border-gray-200 text-gray-500'"><input type="radio" v-model="newExpense.payer" value="彤" class="hidden"> 彤</label>
-                                <label class="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors" :class="newExpense.payer === '冠岑' ? 'bg-blue-100 border-blue-200 text-blue-700 font-bold' : 'bg-white border-gray-200 text-gray-500'"><input type="radio" v-model="newExpense.payer" value="冠岑" class="hidden"> 冠岑</label>
-                            </div>
-                            <button type="submit" class="bg-primary-600 text-white rounded-lg w-10 h-10 flex items-center justify-center shadow-lg shadow-primary-200 active-scale"><i class="ph-bold ph-plus"></i></button>
-                        </div>
-                    </form>
-
-                    <div class="space-y-3">
-                        <div v-for="exp in expenses" :key="exp.id" class="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-50 shadow-sm transition-all duration-300" :class="exp.isSettled ? 'opacity-50 grayscale bg-gray-50' : ''">
-                            <div class="flex items-center gap-3">
-                                <label class="checkbox-wrapper cursor-pointer relative w-5 h-5">
-                                    <input type="checkbox" v-model="exp.isSettled" @change="toggleSettled(exp)" class="hidden">
-                                    <div class="w-5 h-5 border-2 border-gray-300 rounded-md flex items-center justify-center transition-colors"><svg class="w-3 h-3 text-white hidden pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>
-                                </label>
-                                <div class="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0" :class="getCategoryColor(exp.category)"><i :class="getCategoryIcon(exp.category)"></i></div>
-                                <div>
-                                    <h4 class="font-bold text-gray-800 text-sm" :class="exp.isSettled ? 'line-through text-gray-400' : ''">{{ exp.description }}</h4>
-                                    <div class="flex gap-1 mt-0.5">
-                                        <span class="text-[10px] px-1.5 py-0.5 rounded" :class="exp.payer === '彤' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'">{{ exp.payer }}</span>
-                                        <span class="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{{ exp.date }}</span>
-                                        <span v-if="exp.isSettled" class="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded font-bold">已結清</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="text-right">
-                                <p class="font-bold text-gray-800">{{ exp.currency }} {{ formatMoney(exp.amount) }}</p>
-                                <p v-if="exp.currency !== 'TWD'" class="text-[10px] text-gray-400">≈ NT$ {{ formatMoney(convertToTWD(exp)) }}</p>
-                                <button @click="deleteExpense(exp.id)" class="text-red-300 text-xs mt-1 hover:text-red-500">刪除</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 分頁 3: 統計圖表 -->
-                <div v-if="activeTab === 'chart'" class="animate-fade-in flex flex-col items-center">
-                    <div v-if="expenses.length === 0" class="text-center py-20 text-gray-400"><i class="ph ph-chart-pie-slice text-4xl mb-2"></i><p>還沒有支出紀錄</p></div>
-                    <div v-else class="w-full">
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6 text-center">
-                            <p class="text-gray-400 text-xs mb-1">旅程總支出 (含已結清)</p>
-                            <h2 class="text-3xl font-bold text-gray-800 font-mono">${{ formatMoney(totalTripTWD) }}</h2>
-                        </div>
-                        <div class="relative w-56 h-56 mx-auto mb-8 rounded-full shadow-inner active-scale transition-transform" :style="pieStyle">
-                            <div class="absolute inset-0 m-auto w-36 h-36 bg-white rounded-full flex items-center justify-center flex-col shadow-sm">
-                                <span class="text-xs text-gray-400">主要支出</span>
-                                <span class="font-bold text-lg text-primary-600">{{ topCategory.name }}</span>
-                                <span class="text-xs text-gray-400">{{ topCategory.percent.toFixed(0) }}%</span>
-                            </div>
-                        </div>
-                        <div class="space-y-3">
-                            <div v-for="item in chartData" :key="item.name" class="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-50 shadow-sm">
-                                <div class="flex items-center gap-3"><div class="w-3 h-3 rounded-full" :style="{ backgroundColor: item.color }"></div><span class="font-bold text-gray-700 text-sm">{{ item.name }}</span></div>
-                                <div class="text-right"><p class="font-bold text-gray-800 text-sm">${{ formatMoney(item.value) }}</p><p class="text-xs text-gray-400">{{ item.percent.toFixed(1) }}%</p></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </main>
-
-            <!-- 底部導航 (更新為 4 格) -->
-            <nav class="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-100 pb-safe z-30">
-                <div class="grid grid-cols-4 h-16">
-                     <button @click="activeTab = 'notes'" class="flex flex-col items-center gap-1 w-full h-full justify-center active-scale transition-colors" :class="activeTab === 'notes' ? 'text-primary-600' : 'text-gray-400'"><i class="text-2xl" :class="activeTab === 'notes' ? 'ph-fill ph-notebook' : 'ph ph-notebook'"></i><span class="text-[10px] font-medium">筆記</span></button>
-                    <button @click="activeTab = 'itinerary'" class="flex flex-col items-center gap-1 w-full h-full justify-center active-scale transition-colors border-l border-gray-50" :class="activeTab === 'itinerary' ? 'text-primary-600' : 'text-gray-400'"><i class="text-2xl" :class="activeTab === 'itinerary' ? 'ph-fill ph-map-trifold' : 'ph ph-map-trifold'"></i><span class="text-[10px] font-medium">行程</span></button>
-                    <button @click="activeTab = 'expense'" class="flex flex-col items-center gap-1 w-full h-full justify-center active-scale transition-colors border-x border-gray-50" :class="activeTab === 'expense' ? 'text-primary-600' : 'text-gray-400'"><i class="text-2xl" :class="activeTab === 'expense' ? 'ph-fill ph-wallet' : 'ph ph-wallet'"></i><span class="text-[10px] font-medium">分帳</span></button>
-                    <button @click="activeTab = 'chart'" class="flex flex-col items-center gap-1 w-full h-full justify-center active-scale transition-colors" :class="activeTab === 'chart' ? 'text-primary-600' : 'text-gray-400'"><i class="text-2xl" :class="activeTab === 'chart' ? 'ph-fill ph-chart-pie-slice' : 'ph ph-chart-pie-slice'"></i><span class="text-[10px] font-medium">統計</span></button>
-                </div>
-            </nav>
-
-            <!-- 新增/修改行程 Modal -->
-            <div v-if="showAddModal" class="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-                <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl relative animate-slide-up">
-                    <h3 class="text-lg font-bold mb-4">{{ editingId ? '修改行程' : '新增行程' }} (Day {{ selectedDayIndex + 1 }})</h3>
-                    <input v-model="newItem.time" type="time" class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3 outline-none focus:border-primary-500">
-                    <input v-model="newItem.title" type="text" placeholder="行程名稱 (例: 晴空塔)" class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3 outline-none focus:border-primary-500">
-                    <input v-model="newItem.location" type="text" placeholder="地點 (Google Map 搜尋用)" class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4 outline-none focus:border-primary-500">
-                    <div class="flex gap-3"><button @click="closeModal" class="flex-1 py-3 rounded-xl bg-gray-100 text-gray-500 font-bold">取消</button><button @click="saveItineraryItem" class="flex-1 py-3 rounded-xl bg-primary-600 text-white font-bold shadow-lg shadow-primary-200">{{ editingId ? '儲存修改' : '確定新增' }}</button></div>
-                </div>
-            </div>
-
-            <!-- 新增筆記 Modal -->
-            <div v-if="showAddNoteModal" class="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-                <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl relative animate-slide-up">
-                    <h3 class="text-lg font-bold mb-4">新增筆記</h3>
-                    <input v-model="newNote.title" type="text" placeholder="標題 (例: 必買清單)" class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3 outline-none focus:border-primary-500 font-bold">
-                    <textarea v-model="newNote.content" placeholder="內容..." rows="4" class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 mb-3 outline-none focus:border-primary-500"></textarea>
-                    
-                    <div class="mb-4">
-                        <label class="text-xs text-gray-400 block mb-2">分類標籤</label>
-                        <div class="flex gap-2">
-                             <button v-for="tag in ['一般', '重要', '美食', '景點']" :key="tag" @click="newNote.tag = tag" 
-                                class="px-3 py-1.5 rounded-full text-xs font-bold border transition-colors"
-                                :class="newNote.tag === tag ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-500 border-gray-200'">
-                                {{ tag }}
-                             </button>
-                        </div>
-                    </div>
-
-                    <div class="flex gap-3"><button @click="showAddNoteModal = false" class="flex-1 py-3 rounded-xl bg-gray-100 text-gray-500 font-bold">取消</button><button @click="addNote" class="flex-1 py-3 rounded-xl bg-primary-600 text-white font-bold shadow-lg shadow-primary-200">儲存</button></div>
-                </div>
-            </div>
-        </template>
     </div>
 
     <!-- ⚠️ 請將這裡的 <script> 改為 type="module" 才能使用 Firebase -->
@@ -360,7 +245,7 @@
         import { createApp, ref, computed, onMounted, nextTick, watch } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp, getDocs, writeBatch } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
         // ⚠️【請將步驟 1 申請的 config 貼在這裡】⚠️
         const firebaseConfig = {
@@ -379,21 +264,10 @@
 
         createApp({
             setup() {
-                // --- Global State ---
                 const online = ref(false);
-                const appSettings = ref(null); // { destination, lat, lon, countryCode, currency, rate, lang, startDate, endDate }
-                
-                // --- Setup Wizard State ---
-                const setupForm = ref({ destination: '', startDate: '', endDate: '', clearData: false });
-                const setupLoading = ref(false);
-                const setupError = ref('');
-
-                // --- App State ---
                 const activeTab = ref('itinerary');
                 const showAddModal = ref(false);
-                const showAddNoteModal = ref(false);
                 const selectedDayIndex = ref(0);
-                const editingId = ref(null); // 用來追蹤正在編輯的行程 ID
                 
                 // Map State
                 const showMap = ref(false);
@@ -402,12 +276,18 @@
                 let userMarker = null;
 
                 // Data Refs
-                const itineraryDays = ref([]);
+                const itineraryDays = ref([
+                    { date: '17', fullDate: '2024-04-17', items: [] },
+                    { date: '18', fullDate: '2024-04-18', items: [] },
+                    { date: '19', fullDate: '2024-04-19', items: [] },
+                    { date: '20', fullDate: '2024-04-20', items: [] },
+                    { date: '21', fullDate: '2024-04-21', items: [] },
+                    { date: '22', fullDate: '2024-04-22', items: [] },
+                    { date: '23', fullDate: '2024-04-23', items: [] },
+                ]);
                 const expenses = ref([]);
-                const notes = ref([]); // New Notes State
                 const newItem = ref({ time: '09:00', title: '', location: '' });
                 const newExpense = ref({ amount: '', description: '', currency: 'IDR', payer: '彤', category: '食物', isSettled: false });
-                const newNote = ref({ title: '', content: '', tag: '一般' });
                 const rates = ref({ IDR: 490, USD: 0.032 });
 
                 // Location Coords for Map
@@ -419,103 +299,43 @@
                 };
                 const categoryColors = { '食物':'#fb923c', '交通':'#60a5fa', '住宿':'#34d399', '購物':'#f472b6', '玩樂':'#a78bfa', '小費':'#facc15' };
 
-                // --- Country/Currency Logic ---
-                const countryCurrencyMap = {
-                    'JP': { cur: 'JPY', lang: '日文' }, 'US': { cur: 'USD', lang: '英文' }, 'GB': { cur: 'GBP', lang: '英文' },
-                    'KR': { cur: 'KRW', lang: '韓文' }, 'TH': { cur: 'THB', lang: '泰文' }, 'VN': { cur: 'VND', lang: '越南文' },
-                    'ID': { cur: 'IDR', lang: '印尼文' }, 'CN': { cur: 'CNY', lang: '中文' }, 'TW': { cur: 'TWD', lang: '中文' },
-                    'FR': { cur: 'EUR', lang: '法文' }, 'DE': { cur: 'EUR', lang: '德文' }, 'IT': { cur: 'EUR', lang: '義大利文' },
-                    'ES': { cur: 'EUR', lang: '西班牙文' }, 'AU': { cur: 'AUD', lang: '英文' }
-                };
+                // --- Firebase Auth & Sync ---
+                onMounted(() => {
+                    signInAnonymously(auth).catch(console.error);
+                    onAuthStateChanged(auth, (user) => {
+                        if (user) {
+                            online.value = true;
+                            // Sync Itinerary
+                            const qItinerary = query(collection(db, "itinerary_items"));
+                            onSnapshot(qItinerary, (snapshot) => {
+                                // Clear current items to avoid duplication
+                                itineraryDays.value.forEach(d => d.items = []);
+                                snapshot.forEach(doc => {
+                                    const data = doc.data();
+                                    const day = itineraryDays.value.find(d => d.fullDate === data.dateFull); // dateFull needs to be stored
+                                    if(day) day.items.push({ id: doc.id, ...data });
+                                });
+                                // Sort items by time
+                                itineraryDays.value.forEach(d => d.items.sort((a,b) => a.time.localeCompare(b.time)));
+                                if(showMap.value) updateMapMarkers();
+                            });
 
-                // --- Setup Logic ---
-                const checkSetup = () => {
-                    const saved = localStorage.getItem('trip_settings_v1');
-                    if (saved) {
-                        appSettings.value = JSON.parse(saved);
-                        newExpense.value.currency = appSettings.value.currency; // default currency
-                        initDays(appSettings.value.startDate, appSettings.value.endDate);
-                    }
-                };
-
-                const initDays = (start, end) => {
-                    const s = new Date(start);
-                    const e = new Date(end);
-                    const days = [];
-                    for(let d = s; d <= e; d.setDate(d.getDate() + 1)) {
-                        days.push({ 
-                            dateObj: new Date(d),
-                            displayDate: `${d.getMonth()+1}/${d.getDate()}`,
-                            fullDate: d.toISOString().split('T')[0],
-                            items: [] 
-                        });
-                    }
-                    itineraryDays.value = days;
-                };
-
-                const resetApp = () => {
-                    if(confirm('重置 App 設定以開啟新旅程？(不會刪除資料庫資料)')) {
-                        localStorage.removeItem('trip_settings_v1');
-                        location.reload();
-                    }
-                };
-
-                const runSetup = async () => {
-                    if(!setupForm.value.destination || !setupForm.value.startDate || !setupForm.value.endDate) {
-                        setupError.value = "請完整填寫所有欄位"; return;
-                    }
-                    setupLoading.value = true; setupError.value = '';
-
-                    try {
-                        // 1. Geocode Destination
-                        const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(setupForm.value.destination)}&count=1&language=en`);
-                        const geoData = await geoRes.json();
-                        if(!geoData.results || !geoData.results.length) throw new Error("找不到該目的地，請試著輸入英文名稱");
-                        
-                        const loc = geoData.results[0];
-                        const countryCode = loc.country_code;
-                        const info = countryCurrencyMap[countryCode] || { cur: 'USD', lang: '未知' }; // Default fallback
-
-                        // 2. Fetch Exchange Rate
-                        let rate = 1;
-                        if(info.cur !== 'TWD') {
-                            const rateRes = await fetch(`https://api.exchangerate-api.com/v4/latest/${info.cur}`);
-                            const rateData = await rateRes.json();
-                            rate = rateData.rates.TWD;
+                            // Sync Expenses
+                            const qExpenses = query(collection(db, "expenses"), orderBy("timestamp", "desc"));
+                            onSnapshot(qExpenses, (snapshot) => {
+                                expenses.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                            });
                         }
+                    });
+                });
 
-                        // 3. Clear Firebase if requested
-                        if(setupForm.value.clearData && online.value) {
-                            const batch = writeBatch(db);
-                            const iDocs = await getDocs(collection(db, "itinerary_items"));
-                            iDocs.forEach(d => batch.delete(d.ref));
-                            const eDocs = await getDocs(collection(db, "expenses"));
-                            eDocs.forEach(d => batch.delete(d.ref));
-                            const nDocs = await getDocs(collection(db, "notes"));
-                            nDocs.forEach(d => batch.delete(d.ref));
-                            await batch.commit();
-                        }
-
-                        // 4. Save Settings
-                        const settings = {
-                            destination: loc.name,
-                            lat: loc.latitude, lon: loc.longitude,
-                            countryCode, currency: info.cur, lang: info.lang,
-                            rate, startDate: setupForm.value.startDate, endDate: setupForm.value.endDate
-                        };
-                        localStorage.setItem('trip_settings_v1', JSON.stringify(settings));
-                        appSettings.value = settings;
-                        newExpense.value.currency = info.cur;
-                        initDays(settings.startDate, settings.endDate);
-
-                    } catch(e) {
-                        setupError.value = "設定失敗: " + e.message;
-                    } finally {
-                        setupLoading.value = false;
-                    }
+                // --- Helper Functions ---
+                const getCoords = (loc) => {
+                    const l = loc.toLowerCase();
+                    for(let k in locationCoords) if(l.includes(k)) return locationCoords[k];
+                    return null;
                 };
 
-                // --- Map & Weather ---
                 const fetchWeather = async (lat, lon) => {
                     try {
                         const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=Asia%2FSingapore`);
@@ -524,63 +344,39 @@
                     } catch { return null; }
                 };
 
-                const getGeo = async (query) => {
-                    // Try to search near the destination first to improve accuracy
-                    try {
-                        const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1`);
-                        const data = await res.json();
-                        if(data.results) return { lat: data.results[0].latitude, lon: data.results[0].longitude };
-                    } catch {}
-                    return { lat: appSettings.value.lat, lon: appSettings.value.lon }; // Fallback to city center
+                const updateWeather = async (item) => {
+                    let c = getCoords(item.location) || getCoords(item.title) || locationCoords['denpasar'];
+                    return await fetchWeather(c.lat, c.lon);
                 };
 
-                // --- Itinerary Logic (Fixed Edit/Delete) ---
-                const saveItineraryItem = async () => {
+                // --- Actions (Firestore) ---
+                const addItineraryItem = async () => {
                     if(!newItem.value.title) return;
                     const dateFull = itineraryDays.value[selectedDayIndex.value].fullDate;
-                    const coords = await getGeo(newItem.value.location || newItem.value.title);
-                    const weather = await fetchWeather(coords.lat, coords.lon);
+                    const weather = await updateWeather(newItem.value);
                     
-                    const data = {
-                        time: newItem.value.time,
-                        title: newItem.value.title,
-                        location: newItem.value.location,
-                        dateFull, weather, coords,
+                    await addDoc(collection(db, "itinerary_items"), {
+                        ...newItem.value,
+                        dateFull,
+                        weather,
                         timestamp: serverTimestamp()
-                    };
-
-                    if (editingId.value) {
-                        await updateDoc(doc(db, "itinerary_items", editingId.value), data);
-                    } else {
-                        await addDoc(collection(db, "itinerary_items"), data);
-                    }
-                    
-                    closeModal();
+                    });
+                    showAddModal.value = false;
+                    newItem.value = { time: '09:00', title: '', location: '' };
                 };
 
                 const deleteItem = async (id) => {
-                    if(confirm("確定要刪除這個行程嗎？")) {
-                        await deleteDoc(doc(db, "itinerary_items", id));
-                    }
+                    await deleteDoc(doc(db, "itinerary_items", id));
                 };
 
-                const editItem = (item) => { 
-                    newItem.value = { 
-                        time: item.time, 
-                        title: item.title, 
-                        location: item.location 
-                    };
-                    editingId.value = item.id;
-                    showAddModal.value = true; 
+                const editItem = (item) => {
+                    // Simple edit: delete old and open modal with values
+                    // In a real app, updateDoc is better, but this keeps UI simple
+                    deleteItem(item.id); 
+                    newItem.value = { time: item.time, title: item.title, location: item.location };
+                    showAddModal.value = true;
                 };
 
-                const closeModal = () => {
-                    showAddModal.value = false;
-                    newItem.value = { time: '09:00', title: '', location: '' };
-                    editingId.value = null;
-                };
-
-                // --- Expenses ---
                 const addExpense = async () => {
                     if(!newExpense.value.amount || !newExpense.value.description) return;
                     await addDoc(collection(db, "expenses"), {
@@ -588,50 +384,23 @@
                         date: new Date().toLocaleDateString('zh-TW', {month:'numeric', day:'numeric'}),
                         timestamp: serverTimestamp()
                     });
-                    newExpense.value = { amount: '', description: '', currency: appSettings.value.currency, payer: '彤', category: '食物', isSettled: false };
-                };
-                const deleteExpense = async (id) => await deleteDoc(doc(db, "expenses", id));
-                const toggleSettled = async (exp) => await updateDoc(doc(db, "expenses", exp.id), { isSettled: exp.isSettled });
-
-                // --- Notes Logic ---
-                const addNote = async () => {
-                    if(!newNote.value.title) return;
-                    await addDoc(collection(db, "notes"), {
-                        ...newNote.value,
-                        timestamp: serverTimestamp()
-                    });
-                    showAddNoteModal.value = false;
-                    newNote.value = { title: '', content: '', tag: '一般' };
-                };
-                
-                const deleteNote = async (id) => await deleteDoc(doc(db, "notes", id));
-
-                const addDefaultNotes = async () => {
-                     // Bali Default Tips
-                     const defaults = [
-                        { title: '飲水衛生 (Bali Belly)', content: '⚠️ 絕對不要飲用自來水！刷牙也建議用瓶裝水。\n路邊攤飲料若含冰塊請小心，確保冰塊是衛生的。', tag: '重要' },
-                        { title: '小費標準', content: '🍽️ 餐廳：通常已含 10-15% 服務費。\n🚗 包車司機：約 50k-100k IDR/天。\n🛏️ 床頭/行李：約 10k-20k IDR/次。', tag: '重要' },
-                        { title: '交通建議', content: '推薦下載 GoJek 或 Grab，價格透明且安全。\n路邊計程車建議搭乘 Blue Bird (藍鳥)，並要求跳錶。', tag: '一般' },
-                        { title: '換匯技巧', content: '機場匯率較差，建議換少量即可。\n市區換匯請找正規店面 (有綠色 PVA 標誌)，當面點清金額，不要讓錢離開視線。', tag: '重要' }
-                     ];
-                     const batch = writeBatch(db);
-                     defaults.forEach(n => {
-                        const ref = doc(collection(db, "notes"));
-                        batch.set(ref, { ...n, timestamp: serverTimestamp() });
-                     });
-                     await batch.commit();
+                    newExpense.value = { amount: '', description: '', currency: 'IDR', payer: '彤', category: '食物', isSettled: false };
                 };
 
-                const getNoteColor = (tag) => ({ '重要':'bg-red-400', '美食':'bg-orange-400', '景點':'bg-blue-400', '一般':'bg-gray-300' }[tag] || 'bg-gray-300');
-                const getNoteTagStyle = (tag) => ({ '重要':'bg-red-100 text-red-600', '美食':'bg-orange-100 text-orange-600', '景點':'bg-blue-100 text-blue-600', '一般':'bg-gray-100 text-gray-500' }[tag] || 'bg-gray-100');
+                const deleteExpense = async (id) => {
+                    await deleteDoc(doc(db, "expenses", id));
+                };
+
+                const toggleSettled = async (exp) => {
+                    await updateDoc(doc(db, "expenses", exp.id), { isSettled: exp.isSettled });
+                };
 
                 // --- Map Logic ---
                 const currentDayItinerary = computed(() => itineraryDays.value[selectedDayIndex.value].items);
                 
                 const initMap = () => {
                     if(mapInstance) return;
-                    // Use destination lat/lon as initial center
-                    mapInstance = L.map('map').setView([appSettings.value.lat, appSettings.value.lon], 12);
+                    mapInstance = L.map('map').setView([-8.409518, 115.188919], 10);
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OSM' }).addTo(mapInstance);
                     markersGroup = L.layerGroup().addTo(mapInstance);
                 };
@@ -641,17 +410,17 @@
                     markersGroup.clearLayers();
                     let has = false, bounds = L.latLngBounds();
                     currentDayItinerary.value.forEach(i => {
-                        if(i.coords) {
-                            L.marker([i.coords.lat, i.coords.lon], { icon: L.icon({
+                        let c = getCoords(i.location) || getCoords(i.title);
+                        if(c) {
+                            L.marker([c.lat, c.lon], { icon: L.icon({
                                 iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
                                 shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
                                 iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
                             })}).bindPopup(`<b>${i.time} ${i.title}</b><br>${i.location}`).addTo(markersGroup);
-                            bounds.extend([i.coords.lat, i.coords.lon]); has = true;
+                            bounds.extend([c.lat, c.lon]); has = true;
                         }
                     });
                     if(has) mapInstance.fitBounds(bounds, { padding: [50, 50] });
-                    else mapInstance.setView([appSettings.value.lat, appSettings.value.lon], 12);
                 };
 
                 const toggleMap = async () => {
@@ -677,12 +446,11 @@
                 const convertToTWD = (e) => {
                     let amt = parseFloat(e.amount);
                     if(e.currency === 'TWD') return amt;
-                    if(e.currency === 'USD') return amt / 0.032; // Fallback USD rate
-                    if(e.currency === appSettings.value.currency) return amt * appSettings.value.rate;
-                    return amt; 
+                    if(e.currency === 'IDR') return amt / rates.value.IDR;
+                    if(e.currency === 'USD') return amt / rates.value.USD;
+                    return 0;
                 };
 
-                // (Keep existing computed properties logic)
                 const activeExpenses = computed(() => expenses.value.filter(e => !e.isSettled));
                 const activeTotalTWD = computed(() => activeExpenses.value.reduce((s, e) => s + convertToTWD(e), 0));
                 const activeTongPaid = computed(() => activeExpenses.value.filter(e => e.payer === '彤').reduce((s, e) => s + convertToTWD(e), 0));
@@ -714,44 +482,11 @@
                 const getWeatherIcon = (c) => c <= 3 ? 'ph-sun' : c <= 99 ? 'ph-cloud' : 'ph-sun';
                 const getCategoryColor = (c) => ({ '食物':'bg-orange-100 text-orange-500', '交通':'bg-blue-100 text-blue-500', '住宿':'bg-green-100 text-green-500', '購物':'bg-pink-100 text-pink-500', '玩樂':'bg-purple-100 text-purple-500', '小費':'bg-yellow-100 text-yellow-500' })[c] || 'bg-gray-100 text-gray-500';
                 const getCategoryIcon = (c) => `ph-fill ${{ '食物':'ph-hamburger', '交通':'ph-taxi', '住宿':'ph-bed', '購物':'ph-shopping-bag', '玩樂':'ph-confetti', '小費':'ph-hand-coins' }[c] || 'ph-star'}`;
-                const currentTabName = computed(() => ({ 'itinerary':'行程規劃', 'expense':'分帳助手', 'chart':'支出統計', 'notes':'旅行筆記' }[activeTab.value]));
-
-                watch(selectedDayIndex, () => { if(showMap.value) updateMapMarkers(); });
-
-                onMounted(() => {
-                    checkSetup(); // Check if settings exist
-                    signInAnonymously(auth).catch(console.error);
-                    onAuthStateChanged(auth, (user) => {
-                        if (user) {
-                            online.value = true;
-                            // Sync Notes
-                            const qNotes = query(collection(db, "notes"), orderBy("timestamp", "desc"));
-                            onSnapshot(qNotes, (snapshot) => {
-                                notes.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                            });
-
-                            const qItinerary = query(collection(db, "itinerary_items"), orderBy("timestamp"));
-                            onSnapshot(qItinerary, (snapshot) => {
-                                itineraryDays.value.forEach(d => d.items = []);
-                                snapshot.forEach(doc => {
-                                    const data = doc.data();
-                                    const day = itineraryDays.value.find(d => d.fullDate === data.dateFull);
-                                    if(day) day.items.push({ id: doc.id, ...data });
-                                });
-                                itineraryDays.value.forEach(d => d.items.sort((a,b) => a.time.localeCompare(b.time)));
-                                if(showMap.value) updateMapMarkers();
-                            });
-                            const qExpenses = query(collection(db, "expenses"), orderBy("timestamp", "desc"));
-                            onSnapshot(qExpenses, (snapshot) => { expenses.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); });
-                        }
-                    });
-                });
+                const currentTabName = computed(() => ({ 'itinerary':'行程規劃', 'expense':'分帳助手', 'chart':'支出統計' }[activeTab.value]));
 
                 return {
-                    online, appSettings, setupForm, setupLoading, setupError, runSetup, resetApp,
-                    activeTab, showAddModal, showAddNoteModal, selectedDayIndex, itineraryDays, currentDayItinerary, newItem, saveItineraryItem, deleteItem, editItem, closeModal, editingId,
+                    online, activeTab, showAddModal, selectedDayIndex, itineraryDays, currentDayItinerary, newItem, addItineraryItem, deleteItem, editItem,
                     showMap, toggleMap, locateUser, expenses, newExpense, addExpense, deleteExpense, toggleSettled,
-                    notes, newNote, addNote, deleteNote, addDefaultNotes, getNoteColor, getNoteTagStyle,
                     activeTotalTWD, activeTongPaid, activeGuanCenPaid, activeBalance, activeTongPercent, totalTripTWD, chartData, topCategory, pieStyle,
                     formatMoney, convertToTWD, getWeatherIcon, getCategoryColor, getCategoryIcon, currentTabName
                 };
